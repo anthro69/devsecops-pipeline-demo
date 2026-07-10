@@ -1,96 +1,127 @@
-name: Security Pipeline
+name: Security Scan
 
 on:
   push:
-    branches: ["main", "dev"]
+    branches: [main]
   pull_request:
-    branches: ["main"]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   
 
 jobs:
-  bandit-sast:
-    name: Bandit SAST
+  bandit:
+    name: SAST - Bandit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install Bandit
-        run: pip install bandit
+        run: pip install bandit[sarif]
 
-      - name: Run Bandit
-        run: bandit -r app/ -f json -o bandit-report.json || true
+      - name: Full report (all severities, non-blocking)
+        run: bandit -r app/ -f sarif -o bandit-results.sarif
+        continue-on-error: true
 
-      - name: Upload Bandit Report
-        uses: actions/upload-artifact@v3
+      - name: Upload Bandit SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit-results.sarif
+          category: bandit
+
+      - name: Upload Bandit report artifact
+        uses: actions/upload-artifact@v4
         with:
           name: bandit-report
-          path: bandit-report.json
+          path: bandit-results.sarif
 
-      - name: Print Bandit Summary
-        run: bandit -r app/ -ll || true
-
-  semgrep-sast:
-    name: Semgrep SAST
+      - name: Quality gate — fail on HIGH severity
+        run: bandit -r app/ -lll   
+  semgrep:
+    name: SAST - Semgrep
     runs-on: ubuntu-latest
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Run Semgrep
-        run: semgrep --config=auto --json --output=semgrep-report.json app/ || true
+      - name: Full report (all severities, non-blocking)
+        run: semgrep scan --config auto --sarif --output semgrep-results.sarif app/
+        continue-on-error: true
 
-      - name: Upload Semgrep Report
-        uses: actions/upload-artifact@v3
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep
+
+      - name: Upload Semgrep report artifact
+        uses: actions/upload-artifact@v4
         with:
           name: semgrep-report
-          path: semgrep-report.json
+          path: semgrep-results.sarif
 
-      - name: Print Semgrep Summary
-        run: semgrep --config=auto app/ || true
-
-  dependency-check:
-    name: Dependency Vulnerability Check
+      - name: Quality gate — fail on ERROR severity
+        run: semgrep scan --config auto --severity ERROR --error app/
+  safety:
+    name: Dependency Scan - Safety
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install Safety
         run: pip install safety
 
-      - name: Run Safety Check
-        run: safety check -r requirements.txt --json --output safety-report.json || true
+      - name: Run Safety check
+        run: safety check -r requirements.txt --full-report
+        continue-on-error: true
 
-      - name: Upload Safety Report
-        uses: actions/upload-artifact@v3
-        with:
-          name: safety-report
-          path: safety-report.json
-
-      - name: Print Safety Summary
-        run: safety check -r requirements.txt || true
-
-  security-summary:
-    name: Security Summary
+  pip-audit:
+    name: Dependency Scan - pip-audit
     runs-on: ubuntu-latest
-    needs: [bandit-sast, semgrep-sast, dependency-check]
     steps:
-      - name: Print Summary
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt -f json -o pip-audit-report.json
+        continue-on-error: true
+
+      - name: Upload pip-audit report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+
+  gate:
+    name: Security Gate
+    needs: [bandit, semgrep, safety, pip-audit]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check critical SAST results
         run: |
-          echo "## Security Scan Complete" >> $GITHUB_STEP_SUMMARY
-          echo "| Tool | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Bandit SAST | Done |" >> $GITHUB_STEP_SUMMARY
-          echo "| Semgrep SAST | Done |" >> $GITHUB_STEP_SUMMARY
-          echo "| Safety Dependency Check | Done |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check artifacts for full reports." >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.bandit.result }}" != "success" ] || [ "${{ needs.semgrep.result }}" != "success" ]; then
+            echo "Critical SAST findings (HIGH/ERROR severity) — merge заблоковано."
+            exit 1
+          fi
+          echo "Жодних critical SAST-знахідок. Dependency-звіти (Safety, pip-audit) — дивись у Security tab та артефактах."
