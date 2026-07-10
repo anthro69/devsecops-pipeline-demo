@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# SQLite database (генерується застосунком)
+*.db
+*.sqlite3
+app/users.db
+
+# Security scan reports (артефакти пайплайну, не треба комітити)
+bandit-report.json
+semgrep-results.sarif
+bandit-results.sarif
+safety-report.json
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
