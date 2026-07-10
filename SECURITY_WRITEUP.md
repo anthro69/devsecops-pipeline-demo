@@ -89,10 +89,10 @@ JSON-артефактом).
 
 ## Реалізовано (було в roadmap)
 
-- ✅ **Quality gate замість суцільного `continue-on-error`** — тепер
+- **Quality gate замість суцільного `continue-on-error`** — тепер
   HIGH/ERROR severity блокують pipeline, а low/medium лише потрапляють у
   звіт.
-- ✅ **Другий незалежний dependency-сканер** — додано `pip-audit` (база
+- **Другий незалежний dependency-сканер** — додано `pip-audit` (база
   OSV) поруч із Safety (база PyUp) для крос-перевірки.
 
 ## Що можна зробити далі (roadmap)
