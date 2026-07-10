@@ -40,7 +40,6 @@ python app/main.py
 JSON-звіти доступні як артефакти:
 - `bandit-report.json`
 - `semgrep-report.json`
-- `safety-report.json`
 
 ## Документація
 
